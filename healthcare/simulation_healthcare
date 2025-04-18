@@ -1,1 +1,54 @@
+# -------------------------------
+# CYBER RISK SIMULATION MODEL
+# -------------------------------
 
+# Set seed for reproducibility
+set.seed(42)
+
+# Simulation parameters
+n_orgs <- 1000
+lambda_attacks <- 1.5
+mean_cost <- 159000
+log_sd <- 2.44
+
+# Insurance parameters
+deductible <- 50000
+coverage_limit <- 2000000
+claim_prob <- 0.7
+premium <- 75000
+
+# Simulate number of attacks per organization
+num_attacks <- rpois(n_orgs, lambda = lambda_attacks)
+
+# Function to simulate total loss per org
+simulate_loss <- function(n) {
+  if (n == 0) return(0)
+  raw_costs <- rlnorm(n, meanlog = log(mean_cost), sdlog = log_sd)
+  capped_costs <- pmax(1000, pmin(raw_costs, 5000000))
+  sum(capped_costs)
+}
+
+# Generate losses
+total_loss <- sapply(num_attacks, simulate_loss)
+
+# Calculate insurance payout
+claimable_loss <- pmax(0, total_loss - deductible)
+claim_trigger <- runif(n_orgs) < claim_prob
+insurance_payout <- ifelse(claim_trigger, pmin(claimable_loss, coverage_limit), 0)
+
+# Out-of-pocket loss
+out_of_pocket <- total_loss - insurance_payout
+
+# Build data frame
+cyber_risk_df <- data.frame(
+  Org_ID = 1:n_orgs,
+  Num_Attacks = num_attacks,
+  Total_Loss = total_loss,
+  Insurance_Payout = insurance_payout,
+  Out_Of_Pocket = out_of_pocket,
+  Premium = premium,
+  Loss_Ratio = insurance_payout / premium
+)
+
+# Preview
+head(cyber_risk_df)
