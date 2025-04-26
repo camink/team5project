@@ -6,7 +6,7 @@
 set.seed(42)
 
 # Simulation parameters
-n_orgs <- 1000
+n_orgs <- 10000
 lambda_attacks <- 2.7
 mean_cost <- 261000
 log_sd <- 2.44
