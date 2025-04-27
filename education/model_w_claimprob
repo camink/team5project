@@ -1,0 +1,78 @@
+# -------------------------------
+# CYBER RISK SIMULATION MODEL EDUCATION
+# -------------------------------
+
+# Set seed for reproducibility
+set.seed(42)
+
+# Simulation parameters
+n_orgs <- 100
+lambda_attacks <- 2.88
+mean_cost <- 131000
+log_sd <- 2.44
+
+# Insurance parameters
+deductible <- 228000
+coverage_limit <- 5000000
+approval_prob <- 0.77
+premium <- 2500
+submit_prob <- 0.29
+  
+  
+# Simulate number of attacks per organization
+num_attacks <- rpois(n_orgs, lambda = lambda_attacks)
+
+# Function to simulate total loss per org
+simulate_loss <- function(n) {
+  if (n == 0) return(0)
+  raw_costs <- rlnorm(n, meanlog = log(mean_cost), sdlog = log_sd)
+  capped_costs <- pmax(0, pmin(raw_costs, 2000000))
+  sum(capped_costs)
+}
+
+# Generate losses
+total_loss <- sapply(num_attacks, simulate_loss)
+
+# Calculate insurance payout
+submission <- runif(n_orgs) < submit_prob
+approval <- runif(n_orgs) < approval_prob
+claimable_loss <- pmax(0, total_loss - deductible)
+claim_trigger <- submission & approval
+insurance_payout <- ifelse(claim_trigger, pmin(claimable_loss, coverage_limit), 0)
+
+# Out-of-pocket loss
+out_of_pocket <- total_loss - insurance_payout
+
+# Build data frame
+cyber_risk_df <- data.frame(
+  Org_ID = 1:n_orgs,
+  Num_Attacks = num_attacks,
+  Total_Loss = total_loss,
+  Insurance_Payout = insurance_payout,
+  Out_Of_Pocket = out_of_pocket,
+  Premium = premium,
+  Loss_Ratio = insurance_payout / premium
+)
+
+# Preview
+head(cyber_risk_df)
+
+hist(cyber_risk_df$Loss_Ratio,
+     breaks = 10,
+     col = "lightgreen",
+     border = "white",
+     main = "Distribution of Insurance Loss Ratios",
+     xlab = "Loss Ratio (Insurance Payout / Premium)")
+
+
+sum(cyber_risk_df$Loss_Ratio < 1)
+summary(cyber_risk_df$Insurance_Payout)
+summary(cyber_risk_df$Total_Loss)
+mean(insurance_payout[insurance_payout !=0])
+
+total_premiums <- sum(premium)
+total_payouts <- sum(insurance_payout)
+profit <- total_premiums - total_payouts
+
+profit
+
