@@ -6,14 +6,14 @@
 set.seed(42)
 
 # Simulation parameters
-n_orgs <- 1000
+n_orgs <- 10000
 lambda_attacks <- 2.8
 mean_cost <- 131000
 log_sd <- 2.44
 
 # Insurance parameters
 deductible <- 228000
-coverage_limit <- 16000000
+coverage_limit <- 5000000
 claim_prob <- 0.7
 premium <- 25000
 
