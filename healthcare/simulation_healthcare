@@ -1,54 +1,108 @@
 # -------------------------------
-# CYBER RISK SIMULATION MODEL
+# CYBER RISK SIMULATION MODEL - Healthcare
 # -------------------------------
 
-# Set seed for reproducibility
 set.seed(42)
 
-# Simulation parameters
-n_orgs <- 10000
-lambda_attacks <- 2.7
-mean_cost <- 261000
-log_sd <- 2.44
+# PARAMETERS
 
-# Insurance parameters
-deductible <- 228000
-coverage_limit <- 16000000
-claim_prob <- 0.7
-premium <- 25000
+
+n_orgs <- 10000                  # number of organizations
+lambda_attacks <- 2.7            # avg number of attacks per org
+mean_cost <- 261000              # average cost per attack
+log_sd <- 2.44                   # log-space standard deviation
+
+deductible <- 303000              # annual deductible per org
+coverage_limit <- 5000000        # max coverage per org
+premium <- 31000                 # flat premium per org
+
+
+submit_prob <- 0.28               # probability attack is submitted
+approval_prob <- 0.77             # probability attack is approved after submission
+
+
+# SIMULATE ATTACKS
+
 
 # Simulate number of attacks per organization
 num_attacks <- rpois(n_orgs, lambda = lambda_attacks)
 
-# Function to simulate total loss per org
-simulate_loss <- function(n) {
-  if (n == 0) return(0)
-  raw_costs <- rlnorm(n, meanlog = log(mean_cost), sdlog = log_sd)
-  capped_costs <- pmax(1000, pmin(raw_costs, 17600000))
-  sum(capped_costs)
+# Initialize storage vectors
+all_attack_costs <- c()
+attack_submissions <- c()
+attack_approvals <- c()
+org_ids <- c()
+
+# Simulate attacks per organization
+for (i in 1:n_orgs) {
+  n_attacks <- num_attacks[i]
+  
+  if (n_attacks > 0) {
+    attack_costs <- rlnorm(n_attacks, meanlog = log(mean_cost), sdlog = log_sd)
+    capped_costs <- pmax(0, pmin(attack_costs, 17600000))
+    
+    submissions <- runif(n_attacks) < submit_prob
+    approvals <- (runif(n_attacks) < approval_prob) & submissions
+    
+    all_attack_costs <- c(all_attack_costs, capped_costs)
+    attack_submissions <- c(attack_submissions, submissions)
+    attack_approvals <- c(attack_approvals, approvals)
+    org_ids <- c(org_ids, rep(i, n_attacks))
+  }
 }
 
-# Generate losses
-total_loss <- sapply(num_attacks, simulate_loss)
+# Create attack-level dataframe
+attacks_df <- data.frame(
+  Org_ID = org_ids,
+  Cost = all_attack_costs,
+  Submitted = attack_submissions,
+  Approved = attack_approvals
+)
 
-# Calculate insurance payout
-claimable_loss <- pmax(0, total_loss - deductible)
-claim_trigger <- runif(n_orgs) < claim_prob
-insurance_payout <- ifelse(claim_trigger, pmin(claimable_loss, coverage_limit), 0)
 
-# Out-of-pocket loss
-out_of_pocket <- total_loss - insurance_payout
+# ORGANIZATION-LEVEL CALCULATIONS
 
-# Build data frame
+
+# Total loss per organization
+org_total_loss <- tapply(attacks_df$Cost, attacks_df$Org_ID, sum)
+
+# Fill losses for orgs with no attacks
+org_total_loss_full <- rep(0, n_orgs)
+org_total_loss_full[as.integer(names(org_total_loss))] <- org_total_loss
+
+# Deductible adjustment
+org_claimable_loss <- pmax(0, org_total_loss_full - deductible)
+
+# Attach claimable loss info to attacks
+attacks_df$Org_Claimable_Loss <- org_claimable_loss[attacks_df$Org_ID]
+
+# Approved, claimable attacks
+attacks_df$Claimable_Attack <- ifelse(attacks_df$Org_Claimable_Loss > 0 & attacks_df$Approved, attacks_df$Cost, 0)
+
+# Sum payouts by organization
+payouts_by_org <- tapply(attacks_df$Claimable_Attack, attacks_df$Org_ID, sum)
+
+# Create full payout vector (initialize 0s)
+final_payouts_full <- rep(0, n_orgs)
+final_payouts_full[as.integer(names(payouts_by_org))] <- payouts_by_org
+
+# Apply coverage limit
+final_payouts_full <- pmin(final_payouts_full, coverage_limit)
+
+
+# FINAL PORTFOLIO TABLE
+
+
+# Build organization-level summary dataframe
 cyber_risk_df <- data.frame(
   Org_ID = 1:n_orgs,
   Num_Attacks = num_attacks,
-  Total_Loss = total_loss,
-  Insurance_Payout = insurance_payout,
-  Out_Of_Pocket = out_of_pocket,
+  Total_Loss = org_total_loss_full,
+  Insurance_Payout = final_payouts_full,
+  Out_Of_Pocket = org_total_loss_full - final_payouts_full,
   Premium = premium,
-  Loss_Ratio = insurance_payout / premium
+  Loss_Ratio = final_payouts_full / premium
 )
 
-# Preview
+# Preview first few rows
 head(cyber_risk_df)
